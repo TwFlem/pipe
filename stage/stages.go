@@ -166,3 +166,52 @@ func Take[T any](done <-chan struct{}, in <-chan T, n int) <-chan T {
 	}()
 	return out
 }
+
+// Or pattern takes in multiple channels, waits for at least one of them
+// to receive a value before continuing execution.
+// This is useful if you need to wait for at least value for some uknown
+// ammount of channels.
+// The ammont of goroutines creates is X/2 where X is the number of channels
+// passed in
+func Or[T any](done <-chan struct{}, in ...<-chan T) <-chan T {
+	if len(in) == 0 {
+		return nil
+	}
+	if len(in) == 1 {
+		return in[0]
+	}
+
+	innerDone := make(chan T)
+	go func() {
+		defer close(innerDone)
+
+		var val T
+		if len(in) == 2 {
+			select {
+			case <-done:
+				return
+			case v := <-in[0]:
+				val = v
+			case v := <-in[1]:
+				val = v
+			}
+		} else {
+			select {
+			case <-done:
+				return
+			case v := <-in[0]:
+				val = v
+			case v := <-in[1]:
+				val = v
+			case v := <-in[2]:
+				val = v
+			case v := <-Or(done, append(in[3:], innerDone)...):
+				val = v
+			}
+		}
+
+		innerDone <- val
+	}()
+
+	return innerDone
+}
