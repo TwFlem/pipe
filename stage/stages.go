@@ -150,3 +150,19 @@ func Throttle[T any](done <-chan struct{}, in <-chan T, delay time.Duration) <-c
 	}()
 	return out
 }
+
+// Take consume some number of values from some stream before exiting
+func Take[T any](done <-chan struct{}, in <-chan T, n int) <-chan T {
+	out := make(chan T)
+	go func() {
+		defer close(out)
+		for i := 0; i < n; i++ {
+			select {
+			case <-done:
+				return
+			case out <- <-in:
+			}
+		}
+	}()
+	return out
+}
