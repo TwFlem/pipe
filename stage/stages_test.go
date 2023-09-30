@@ -12,6 +12,15 @@ func genNums(count int) []int {
 	return nums
 }
 
+func genNumsRange(start, upTo int) []int {
+	l := upTo - start
+	nums := make([]int, upTo-start)
+	for i := 0; i < l; i++ {
+		nums[i] = start + i
+	}
+	return nums
+}
+
 func genEvens(count int) []int {
 	nums := make([]int, count)
 	for i := 0; i < count; i++ {

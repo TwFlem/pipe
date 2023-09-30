@@ -103,3 +103,25 @@ func FanIn[T any](done <-chan struct{}, ins ...<-chan T) <-chan T {
 	}()
 	return out
 }
+
+// Bridge takes a channel of channels as input and streams out the values of each of those
+// channels on a single output. This is similar
+// to how FanIn works except that with the channels of channel input, order is implicitly
+// maintained.
+func Bridge[T any](done <-chan struct{}, in <-chan <-chan T) <-chan T {
+	out := make(chan T)
+	go func() {
+		defer close(out)
+		for v := range OrDone(done, in) {
+			for v := range OrDone(done, v) {
+				select {
+				case <-done:
+					return
+				case out <- v:
+				}
+			}
+		}
+
+	}()
+	return out
+}
