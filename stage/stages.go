@@ -215,3 +215,37 @@ func Or[T any](done <-chan struct{}, in ...<-chan T) <-chan T {
 
 	return innerDone
 }
+
+// Tee like a T pipe, redirect flow of data to two separate outputs.
+// this could be useful for post processing of data
+//
+// WARNING: be mindful of what you tee out. For example, you probably wouldn't want to tee out the same pointer unless you it wouldn't be mutated down stream
+//
+// WARNING: This implementation of tee also tightly couples both outputs. The
+// next value from in cannot be piped through tee's outputs until both
+// of tee's previous outputs have been received.
+func Tee[T any](done <-chan struct{}, in <-chan T) (<-chan T, <-chan T) {
+	out1 := make(chan T)
+	out2 := make(chan T)
+	go func() {
+		defer close(out1)
+		defer close(out2)
+
+		for v := range OrDone(done, in) {
+			o1 := out1
+			o2 := out2
+			for i := 0; i < 2; i++ {
+				select {
+				case <-done:
+					return
+				case o1 <- v:
+					o1 = nil
+				case o2 <- v:
+					o2 = nil
+				}
+			}
+		}
+
+	}()
+	return out1, out2
+}
