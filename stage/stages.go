@@ -1,6 +1,9 @@
 package stage
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 // OrDone syntatic sugar that allows the caller to either block on
 // reading in the next input from some specified channel or cancel
@@ -122,6 +125,28 @@ func Bridge[T any](done <-chan struct{}, in <-chan <-chan T) <-chan T {
 			}
 		}
 
+	}()
+	return out
+}
+
+// Throttle only allow values in to values out once every tick of the delay duration
+func Throttle[T any](done <-chan struct{}, in <-chan T, delay time.Duration) <-chan T {
+	out := make(chan T)
+	go func() {
+		defer close(out)
+		ticker := time.NewTicker(delay)
+		for i := range OrDone(done, in) {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				select {
+				case <-done:
+					return
+				case out <- i:
+				}
+			}
+		}
 	}()
 	return out
 }
