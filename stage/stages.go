@@ -249,3 +249,19 @@ func Tee[T any](done <-chan struct{}, in <-chan T) (<-chan T, <-chan T) {
 	}()
 	return out1, out2
 }
+
+// Buf convenient means of buffering up results between pipeline steps
+func Buf[T any](done <-chan struct{}, in <-chan T, size int) <-chan T {
+	out := make(chan T, size)
+	go func() {
+		defer close(out)
+		for v := range OrDone(done, in) {
+			select {
+			case <-done:
+				return
+			case out <- v:
+			}
+		}
+	}()
+	return out
+}
