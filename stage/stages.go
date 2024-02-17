@@ -250,7 +250,8 @@ func Tee[T any](done <-chan struct{}, in <-chan T) (<-chan T, <-chan T) {
 	return out1, out2
 }
 
-// Buf convenient means of buffering up results between pipeline steps
+// Buf convenient means of buffering up results between pipeline steps with a
+// fix sized queue. Buf will block when the queue if full.
 func Buf[T any](done <-chan struct{}, in <-chan T, size int) <-chan T {
 	out := make(chan T, size)
 	go func() {
@@ -281,6 +282,25 @@ func RingBuf[T any](done <-chan struct{}, in <-chan T, size int) <-chan T {
 			default:
 				<-out
 				out <- v
+			}
+		}
+	}()
+	return out
+}
+
+// BoundedBuf Fix sized buffer that drops incoming requests if full in favor
+// of allowing the requests that made it into the queue finish.
+func BoundedBuf[T any](done <-chan struct{}, in <-chan T, size int) <-chan T {
+	out := make(chan T, size)
+	go func() {
+		defer close(out)
+		for v := range OrDone(done, in) {
+			select {
+			case <-done:
+				return
+			case out <- v:
+			default:
+				continue
 			}
 		}
 	}()
