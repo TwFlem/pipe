@@ -169,9 +169,9 @@ func Take[T any](done <-chan struct{}, in <-chan T, n int) <-chan T {
 
 // Or pattern takes in multiple channels, waits for at least one of them
 // to receive a value before continuing execution.
-// This is useful if you need to wait for at least value for some uknown
-// ammount of channels.
-// The ammont of goroutines creates is X/2 where X is the number of channels
+// This is useful if you need to wait for at least value for some unknown
+// amount of channels.
+// The amount of goroutines creates is X/2 where X is the number of channels
 // passed in
 func Or[T any](done <-chan struct{}, in ...<-chan T) <-chan T {
 	if len(in) == 0 {
@@ -260,6 +260,27 @@ func Buf[T any](done <-chan struct{}, in <-chan T, size int) <-chan T {
 			case <-done:
 				return
 			case out <- v:
+			}
+		}
+	}()
+	return out
+}
+
+// RingBuf Circular fix sized buffer. When the buffer is full and the receiver
+// is busy, the oldest value in the buffer will be evicted and the incoming
+// value will be queued.
+func RingBuf[T any](done <-chan struct{}, in <-chan T, size int) <-chan T {
+	out := make(chan T, size)
+	go func() {
+		defer close(out)
+		for v := range OrDone(done, in) {
+			select {
+			case <-done:
+				return
+			case out <- v:
+			default:
+				<-out
+				out <- v
 			}
 		}
 	}()
