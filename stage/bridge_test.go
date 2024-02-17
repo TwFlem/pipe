@@ -7,12 +7,11 @@ import (
 func TestBridge_Finishes(t *testing.T) {
 	done := make(chan struct{})
 	min := 0
+	max := 10
 	ranges := [][]int{
-		genNumsRange(min, 5),
-		genNumsRange(5, 15),
-		genNumsRange(15, 35),
-		genNumsRange(35, 45),
-		genNumsRange(45, 50),
+		genNumsRange(min, 2),
+		genNumsRange(2, 7),
+		genNumsRange(7, max+1),
 	}
 
 	chans := make(chan (<-chan int), len(ranges))

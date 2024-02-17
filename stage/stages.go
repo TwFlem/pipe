@@ -250,27 +250,99 @@ func Tee[T any](done <-chan struct{}, in <-chan T) (<-chan T, <-chan T) {
 	return out1, out2
 }
 
+type bufConfig struct {
+	// onBlockReport callback that will get called when the fix sized
+	// buffer is full. It will report the time blocked. Useful for
+	// instrumentation. This callback will only be called if
+	// the minimumBlockTimeToReport is exceeded.
+	onBlockReport func(time.Duration)
+	// minimumBlockTimeToReport optional. Defaults to 1 MS. Minimum
+	// duration required to report blocking time.
+	minimumBlockTimeToReport time.Duration
+}
+
+type bufOpt func(*bufConfig)
+
+// BufWithOnBlockReport sets the callback that will get called when the fix sized
+// buffer is full. It will report the time blocked. Useful for
+// instrumentation. This callback will only be called if
+// the minimumBlockTimeToReport is exceeded.
+func BufWithOnBlockReport(f func(time.Duration)) bufOpt {
+	return func(bc *bufConfig) {
+		bc.onBlockReport = f
+	}
+}
+
+// BufWithMinimumBlockTimeToReport Defaults to 1 MS if the block report callback is
+// configured. Represents the minimum duration required to report blocking time.
+func BufWithMinimumBlockTimeToReport(dur time.Duration) bufOpt {
+	return func(bc *bufConfig) {
+		bc.minimumBlockTimeToReport = dur
+	}
+}
+
 // Buf convenient means of buffering up results between pipeline steps with a
 // fix sized queue. Buf will block when the queue if full.
-func Buf[T any](done <-chan struct{}, in <-chan T, size int) <-chan T {
+func Buf[T any](done <-chan struct{}, in <-chan T, size int, opts ...bufOpt) <-chan T {
+	cfg := bufConfig{}
+
+	for _, f := range opts {
+		f(&cfg)
+	}
+
 	out := make(chan T, size)
 	go func() {
 		defer close(out)
+		start := time.Now()
 		for v := range OrDone(done, in) {
+			if cfg.onBlockReport != nil {
+				start = time.Now()
+			}
 			select {
 			case <-done:
 				return
 			case out <- v:
+				if cfg.onBlockReport != nil {
+					since := time.Since(start)
+					if since > cfg.minimumBlockTimeToReport {
+						if cfg.minimumBlockTimeToReport > 0 {
+							cfg.onBlockReport(cfg.minimumBlockTimeToReport)
+						} else {
+							cfg.onBlockReport(time.Millisecond)
+						}
+
+					}
+				}
 			}
 		}
 	}()
 	return out
 }
 
+type ringBufConfig struct {
+	// onDrop callback that will get called when the oldest request in the
+	// ring buffer gets dropped form the queue. Useful for for instrumentation.
+	onDrop func()
+}
+
+type ringBufOpt func(*ringBufConfig)
+
+func RingBufWithOnDrop(f func()) ringBufOpt {
+	return func(rbc *ringBufConfig) {
+		rbc.onDrop = f
+	}
+}
+
 // RingBuf Circular fix sized buffer. When the buffer is full and the receiver
 // is busy, the oldest value in the buffer will be evicted and the incoming
 // value will be queued.
-func RingBuf[T any](done <-chan struct{}, in <-chan T, size int) <-chan T {
+func RingBuf[T any](done <-chan struct{}, in <-chan T, size int, opts ...ringBufOpt) <-chan T {
+	cfg := ringBufConfig{}
+
+	for _, f := range opts {
+		f(&cfg)
+	}
+
 	out := make(chan T, size)
 	go func() {
 		defer close(out)
@@ -282,15 +354,38 @@ func RingBuf[T any](done <-chan struct{}, in <-chan T, size int) <-chan T {
 			default:
 				<-out
 				out <- v
+				if cfg.onDrop != nil {
+					cfg.onDrop()
+				}
 			}
 		}
 	}()
 	return out
 }
 
+type boundedBufConfig struct {
+	// onDrop callback that will get called when the oldest request in the
+	// ring buffer gets dropped form the queue. Useful for for instrumentation.
+	onDrop func()
+}
+
+type boundedBufOpt func(*boundedBufConfig)
+
+func BoundedBufWithOnDrop(f func()) boundedBufOpt {
+	return func(rbc *boundedBufConfig) {
+		rbc.onDrop = f
+	}
+}
+
 // BoundedBuf Fix sized buffer that drops incoming requests if full in favor
 // of allowing the requests that made it into the queue finish.
-func BoundedBuf[T any](done <-chan struct{}, in <-chan T, size int) <-chan T {
+func BoundedBuf[T any](done <-chan struct{}, in <-chan T, size int, opts ...boundedBufOpt) <-chan T {
+	cfg := boundedBufConfig{}
+
+	for _, f := range opts {
+		f(&cfg)
+	}
+
 	out := make(chan T, size)
 	go func() {
 		defer close(out)
@@ -300,6 +395,9 @@ func BoundedBuf[T any](done <-chan struct{}, in <-chan T, size int) <-chan T {
 				return
 			case out <- v:
 			default:
+				if cfg.onDrop != nil {
+					cfg.onDrop()
+				}
 				continue
 			}
 		}

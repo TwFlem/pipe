@@ -2,6 +2,7 @@ package stage
 
 import (
 	"math"
+	"testing"
 )
 
 func genNums(count int) []int {
@@ -55,4 +56,20 @@ func countEvens(nums []int) int {
 		}
 	}
 	return count
+}
+
+func intSliceEquals(t *testing.T, actual, expected []int) {
+	for i := 0; i < len(expected); i++ {
+		if actual[i] != expected[i] {
+			t.Fatalf("expected=%v but actual=%v", expected, actual)
+		}
+	}
+}
+
+func drain[T any](in <-chan T) []T {
+	var out []T
+	for v := range in {
+		out = append(out, v)
+	}
+	return out
 }

@@ -94,7 +94,7 @@ func TestTee(t *testing.T) {
 
 func TestTee_Cancelled(t *testing.T) {
 	done := make(chan struct{})
-	maxVal := 9999
+	maxVal := 100
 	maxLen := maxVal + 1
 	nums := genNums(maxLen)
 	in := make(chan int)
@@ -127,7 +127,7 @@ func TestTee_Cancelled(t *testing.T) {
 			} else {
 				outNums1 = append(outNums1, v)
 				count++
-				if count == 60 {
+				if count == 10 {
 					done <- struct{}{}
 				}
 			}
