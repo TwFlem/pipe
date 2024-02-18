@@ -2,104 +2,119 @@ package stage
 
 import (
 	"testing"
+	"time"
 )
 
-// func TestBuf(t *testing.T) {
-// 	done := make(chan struct{})
-// 	totalNums := 30
-// 	nums := genNums(totalNums)
-// 	in := make(chan int)
-// 	go func() {
-// 		defer close(in)
-// 		for i := range nums {
-// 			in <- nums[i]
-// 		}
-// 	}()
-//
-// 	bufSize := 10
-// 	out := Buf(done, in, bufSize)
-//
-// 	fullBufCount := 0
-// 	ticker := time.NewTicker(time.Millisecond)
-// 	for {
-// 		<-ticker.C
-// 		bufLen := len(out)
-// 		if bufLen != bufSize {
-// 			_, ok := <-out
-// 			if ok {
-// 				t.Fatalf("Expected full buffer with len %d but found %d\n", bufSize, bufLen)
-// 			}
-// 			break
-// 		}
-// 		fullBufCount++
-// 		for i := 0; i < bufSize; i++ {
-// 			<-out
-// 		}
-// 	}
-//
-// 	expectedFullBufCount := totalNums / bufSize
-// 	if fullBufCount != expectedFullBufCount {
-// 		t.Fatalf("Expected full buffer count %d but found %d\n", expectedFullBufCount, fullBufCount)
-// 	}
-// }
+func TestBuf(t *testing.T) {
+	done := make(chan struct{})
+	in := make(chan int)
+	maxOutputBufferSize := 4
 
-// func TestBuf_Cancelled(t *testing.T) {
-// 	done := make(chan struct{})
-// 	totalNums := 1000
-// 	nums := genNums(totalNums)
-// 	in := make(chan int)
-// 	go func() {
-// 		defer close(in)
-// 		for i := range nums {
-// 			in <- nums[i]
-// 		}
-// 	}()
-//
-// 	bufSize := 50
-// 	out := Buf(done, in, bufSize)
-//
-// 	maxFullBufCount := 3
-// 	fullBufCount := 0
-// 	ticker := time.NewTicker(time.Millisecond)
-// loop:
-// 	for {
-// 		select {
-// 		case <-done:
-// 			break loop
-// 		case <-ticker.C:
-// 			bufLen := len(out)
-// 			if bufLen != bufSize {
-// 				_, ok := <-out
-// 				if ok {
-// 					t.Fatalf("Expected full buffer with len %d but found %d\n", bufSize, bufLen)
-// 				}
-// 				break loop
-// 			}
-// 			fullBufCount++
-// 			for i := 0; i < bufSize; i++ {
-// 				<-out
-// 			}
-// 			if maxFullBufCount == fullBufCount {
-// 				done <- struct{}{}
-// 				ticker.Stop()
-// 				break loop
-// 			}
-// 		}
-// 	}
-//
-// 	drainCount := 0
-// 	for range out {
-// 		<-out
-// 		drainCount++
-// 		if drainCount == bufSize {
-// 			t.Fatalf("Got a full sized buffer after signaling done and attempting to drain the buffers out channel\n")
-// 		}
-// 	}
-//
-// 	if fullBufCount != maxFullBufCount {
-// 		t.Fatalf("Expected full buffer count %d but found %d\n", maxFullBufCount, fullBufCount)
-// 	}
-// }
+	unBlocked := make(chan struct{})
+	onBlockReport := func(dur time.Duration) {
+		unBlocked <- struct{}{}
+	}
 
-func TestBuf_OnBlockReport(t *testing.T) {
+	blocked := make(chan struct{})
+	onBlock := func() {
+		blocked <- struct{}{}
+	}
+
+	bufOut := Buf(done, in, maxOutputBufferSize, BufWithMinimumBlockTimeToReport(0), BufWithOnBlockReport(onBlockReport), bufWithOnBlock(onBlock))
+
+	for i := 0; i < 3; i++ {
+		in <- i
+	}
+	numsOut := drain(Take(done, bufOut, 3))
+	expected := []int{0, 1, 2}
+	intSliceEquals(t, numsOut, expected)
+
+	for i := 0; i < 4; i++ {
+		in <- i
+	}
+	numsOut = drain(Take(done, bufOut, 4))
+	expected = []int{0, 1, 2, 3}
+	intSliceEquals(t, numsOut, expected)
+
+	for i := 0; i < maxOutputBufferSize+1; i++ {
+		in <- i
+	}
+	<-blocked
+	first := <-bufOut
+	intCompare(t, 0, first)
+	<-unBlocked
+	numsOut = drain(Take(done, bufOut, 4))
+	expected = []int{1, 2, 3, 4}
+	intSliceEquals(t, numsOut, expected)
+
+	for i := 0; i < maxOutputBufferSize+1; i++ {
+		in <- i
+	}
+	<-blocked
+	first = <-bufOut
+	intCompare(t, 0, first)
+	<-unBlocked
+	in <- 5
+	<-blocked
+	second := <-bufOut
+	intCompare(t, 1, second)
+	<-unBlocked
+	in <- 6
+	<-blocked
+	third := <-bufOut
+	intCompare(t, 2, third)
+	<-unBlocked
+	numsOut = drain(Take(done, bufOut, 4))
+	expected = []int{3, 4, 5, 6}
+	intSliceEquals(t, numsOut, expected)
+}
+
+func TestBuf_Cancelled(t *testing.T) {
+	done := make(chan struct{})
+	in := make(chan int)
+
+	unBlocked := make(chan struct{})
+	onBlockReport := func(dur time.Duration) {
+		unBlocked <- struct{}{}
+	}
+
+	blocked := make(chan struct{})
+	onBlock := func() {
+		blocked <- struct{}{}
+	}
+
+	maxSize := 2
+	bufOut := Buf(done, in, maxSize, BufWithMinimumBlockTimeToReport(0), BufWithOnBlockReport(onBlockReport), bufWithOnBlock(onBlock))
+
+	go func() {
+		for i := 0; i < 7; i++ {
+			in <- i
+		}
+		done <- struct{}{}
+	}()
+
+	<-blocked
+	first := <-bufOut
+	intCompare(t, 0, first)
+	<-unBlocked
+	<-blocked
+	second := <-bufOut
+	intCompare(t, 1, second)
+	<-unBlocked
+	<-blocked
+	third := <-bufOut
+	intCompare(t, 2, third)
+	<-unBlocked
+
+	go func() {
+		for range blocked {
+		}
+	}()
+	go func() {
+		for range unBlocked {
+		}
+	}()
+
+	for range bufOut {
+	}
 }

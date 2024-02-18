@@ -74,37 +74,31 @@ func TestRingBuf(t *testing.T) {
 	intSliceEquals(t, numsOut, expected)
 }
 
-// func TestRingBuf_Cancelled(t *testing.T) {
-// 	done := make(chan struct{})
-// 	in := make(chan int)
-//
-// 	ringSize := 10
-// 	ringBuf := RingBuf(done, in, ringSize)
-//
-// 	for i := 0; i < ringSize; i++ {
-// 		in <- i
-// 	}
-//
-// 	go func() {
-// 		defer func() {
-// 			recover()
-// 		}()
-// 		for i := 0; i < 1_000_000_000_000_000_000; i++ {
-// 			in <- i
-// 		}
-// 	}()
-//
-// 	time.Sleep(5 * time.Millisecond)
-//
-// 	done <- struct{}{}
-//
-// 	// just in case there comes a day when that is still running and other tests are running at the same time...
-// 	close(in)
-//
-// 	out := drain(ringBuf)
-// 	for i := 0; i < len(out); i++ {
-// 		if out[i] < ringSize {
-// 			t.Fatalf("The initial [0, %d) should not be in the ring buffer after executing this long, found the value %d", ringSize, out[i])
-// 		}
-// 	}
-// }
+func TestRingBuf_Cancelled(t *testing.T) {
+	done := make(chan struct{})
+	in := make(chan int)
+
+	dropCount := 5
+	count := 0
+	var mut sync.Mutex
+	onDrop := func() {
+		mut.Lock()
+		count++
+		if count == dropCount {
+		}
+		mut.Unlock()
+	}
+
+	ringSize := 10
+	ringBuf := RingBuf(done, in, ringSize, RingBufWithOnDrop(onDrop))
+
+	go func() {
+		for i := 0; i < 20; i++ {
+			in <- i
+		}
+		done <- struct{}{}
+	}()
+
+	for range ringBuf {
+	}
+}

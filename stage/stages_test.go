@@ -73,3 +73,9 @@ func drain[T any](in <-chan T) []T {
 	}
 	return out
 }
+
+func intCompare(t *testing.T, expected, actual int) {
+	if expected != actual {
+		t.Fatalf("expected first to be %d, but got %d", expected, actual)
+	}
+}

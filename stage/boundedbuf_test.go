@@ -57,39 +57,31 @@ func TestBoundedBuf(t *testing.T) {
 	intSliceEquals(t, numsOut, expected)
 }
 
-// func TestBoundedBuf_Cancelled(t *testing.T) {
-// 	done := make(chan struct{})
-// 	in := make(chan int)
-//
-// 	boundedSize := 1000
-// 	boundedBuf := BoundedBuf(done, in, boundedSize)
-//
-// 	for i := 0; i < boundedSize; i++ {
-// 		in <- i
-// 	}
-// 	time.Sleep(5 * time.Millisecond)
-//
-// 	go func() {
-// 		defer func() {
-// 			recover()
-// 		}()
-// 		for i := 0; i < 1_000_000_000_000_000_000; i++ {
-// 			in <- i
-// 		}
-// 	}()
-//
-// 	time.Sleep(5 * time.Millisecond)
-//
-// 	done <- struct{}{}
-//
-// 	// just in case there comes a day when that is still running and other tests are running at the same time...
-// 	close(in)
-// 	time.Sleep(5 * time.Millisecond)
-//
-// 	out := drain(boundedBuf)
-// 	for i := 0; i < len(out); i++ {
-// 		if out[i] != i {
-// 			t.Fatalf("The initial [0, %d) be the only values left in the queue, found the value %d", boundedSize, out[i])
-// 		}
-// 	}
-// }
+func TestBoundedBuf_Cancelled(t *testing.T) {
+	done := make(chan struct{})
+	in := make(chan int)
+
+	dropCount := 5
+	count := 0
+	var mut sync.Mutex
+	onDrop := func() {
+		mut.Lock()
+		count++
+		if count == dropCount {
+		}
+		mut.Unlock()
+	}
+
+	boundedSize := 10
+	boundedBuf := BoundedBuf(done, in, boundedSize, BoundedBufWithOnDrop(onDrop))
+
+	go func() {
+		for i := 0; i < 20; i++ {
+			in <- i
+		}
+		done <- struct{}{}
+	}()
+
+	for range boundedBuf {
+	}
+}

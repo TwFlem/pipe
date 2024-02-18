@@ -160,7 +160,15 @@ func Take[T any](done <-chan struct{}, in <-chan T, n int) <-chan T {
 			select {
 			case <-done:
 				return
-			case out <- <-in:
+			case vIn, ok := <-in:
+				if !ok {
+					return
+				}
+				select {
+				case <-done:
+					return
+				case out <- vIn:
+				}
 			}
 		}
 	}()
@@ -251,40 +259,50 @@ func Tee[T any](done <-chan struct{}, in <-chan T) (<-chan T, <-chan T) {
 }
 
 type bufConfig struct {
-	// onBlockReport callback that will get called when the fix sized
-	// buffer is full. It will report the time blocked. Useful for
-	// instrumentation. This callback will only be called if
-	// the minimumBlockTimeToReport is exceeded.
-	onBlockReport func(time.Duration)
-	// minimumBlockTimeToReport optional. Defaults to 1 MS. Minimum
-	// duration required to report blocking time.
-	minimumBlockTimeToReport time.Duration
+	// onUnblocked callback that will get called when the fix sized buffer is unblocked after being full
+	// for minimumBlockDurationForOnUnblock. It will report the time blocked. Useful for instrumentation.
+	onUnblocked func(time.Duration)
+	// minimumBlockDurationForOnUnblock optional if onUnblocked is configured. Defaults to 1 MS. Minimum
+	// duration required to report blocking time. Can be set to 0.
+	minimumBlockDurationForOnUnblock time.Duration
+	// Internal only. Used to keep testing deterministic.
+	onBlock func()
 }
 
 type bufOpt func(*bufConfig)
 
-// BufWithOnBlockReport sets the callback that will get called when the fix sized
-// buffer is full. It will report the time blocked. Useful for
-// instrumentation. This callback will only be called if
-// the minimumBlockTimeToReport is exceeded.
+// BufWithOnBlockReport sets the callback that will get called when the fix sized buffer is unblocked after
+// being full for minimumBlockDurationForOnUnblock. It will report the duration the buffer was blocked. Useful
+// for instrumentation.
 func BufWithOnBlockReport(f func(time.Duration)) bufOpt {
 	return func(bc *bufConfig) {
-		bc.onBlockReport = f
+		bc.onUnblocked = f
 	}
 }
 
 // BufWithMinimumBlockTimeToReport Defaults to 1 MS if the block report callback is
 // configured. Represents the minimum duration required to report blocking time.
+// Can be set to 0.
 func BufWithMinimumBlockTimeToReport(dur time.Duration) bufOpt {
 	return func(bc *bufConfig) {
-		bc.minimumBlockTimeToReport = dur
+		bc.minimumBlockDurationForOnUnblock = dur
+	}
+}
+
+// bufWithOnBlock needed for testing. This is not exposed because onUnblock should be all
+// consumers need.
+func bufWithOnBlock(f func()) bufOpt {
+	return func(bc *bufConfig) {
+		bc.onBlock = f
 	}
 }
 
 // Buf convenient means of buffering up results between pipeline steps with a
 // fix sized queue. Buf will block when the queue if full.
 func Buf[T any](done <-chan struct{}, in <-chan T, size int, opts ...bufOpt) <-chan T {
-	cfg := bufConfig{}
+	cfg := bufConfig{
+		minimumBlockDurationForOnUnblock: time.Millisecond,
+	}
 
 	for _, f := range opts {
 		f(&cfg)
@@ -294,25 +312,26 @@ func Buf[T any](done <-chan struct{}, in <-chan T, size int, opts ...bufOpt) <-c
 	go func() {
 		defer close(out)
 		start := time.Now()
+		blocked := false
 		for v := range OrDone(done, in) {
-			if cfg.onBlockReport != nil {
+			blocked = len(out) == size
+			if cfg.onUnblocked != nil && blocked {
+				if cfg.onBlock != nil {
+					cfg.onBlock()
+				}
 				start = time.Now()
 			}
 			select {
 			case <-done:
 				return
 			case out <- v:
-				if cfg.onBlockReport != nil {
+				if cfg.onUnblocked != nil && blocked {
 					since := time.Since(start)
-					if since > cfg.minimumBlockTimeToReport {
-						if cfg.minimumBlockTimeToReport > 0 {
-							cfg.onBlockReport(cfg.minimumBlockTimeToReport)
-						} else {
-							cfg.onBlockReport(time.Millisecond)
-						}
-
+					if since >= cfg.minimumBlockDurationForOnUnblock {
+						cfg.onUnblocked(since)
 					}
 				}
+				blocked = false
 			}
 		}
 	}()
