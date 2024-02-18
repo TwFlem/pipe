@@ -6,12 +6,12 @@ import (
 )
 
 func TestThrottle(t *testing.T) {
-	// TODO: speedup and make deterministic
-	t.Skip()
+	longTestCase(t)
+
 	done := make(chan struct{})
-	nums := genNums(1000)
-	expectedSent := 50
-	eps := 10
+	nums := genNums(100)
+	expectedSent := 10
+	eps := 3
 
 	in := make(chan int)
 	go func() {

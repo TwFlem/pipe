@@ -87,12 +87,10 @@ func TestAgg_HasLittleLastChunk(t *testing.T) {
 }
 
 func TestAgg_Cancelled_NoLastChunk(t *testing.T) {
-	// TODO: make faster and deterministic
-	t.Skip()
 	done := make(chan struct{})
-	countTotal := 10000
-	batchSize := 2500
-	stopSendingAfter := 8500
+	countTotal := 12
+	batchSize := 3
+	stopSendingAfter := 10
 	in := make(chan int)
 
 	out := Agg(done, in, batchSize)
@@ -190,12 +188,10 @@ func TestAgg_FirstChunkLittle(t *testing.T) {
 }
 
 func TestAgg_Cancelled_NoFirstChunk(t *testing.T) {
-	// TODO: make faster and deterministic
-	t.Skip()
 	done := make(chan struct{})
-	countTotal := 10000
-	batchSize := 5000
-	stopSendingAfter := 10
+	countTotal := 12
+	batchSize := 6
+	stopSendingAfter := 2
 	in := make(chan int)
 
 	out := Agg(done, in, batchSize)

@@ -35,20 +35,19 @@ func TestOr(t *testing.T) {
 }
 
 func TestOr_Cancelled(t *testing.T) {
-	// TODO: make faster and deterministic
-	t.Skip()
 	done := make(chan struct{})
 
 	first := make(chan int)
 	chans := [](<-chan int){first}
 
-	for i := 1; i < 10; i++ {
-		dur := time.Duration(i) * time.Second
+	for i := 0; i < 2; i++ {
 		in := make(chan int)
-		go func(innerIn chan int, innerDur time.Duration, v int) {
-			<-time.After(dur)
+		go func(innerIn chan int, v int) {
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+			<-ticker.C
 			innerIn <- v
-		}(in, dur, i)
+		}(in, i)
 		chans = append(chans, in)
 	}
 
@@ -58,7 +57,6 @@ func TestOr_Cancelled(t *testing.T) {
 	}()
 
 	go func() {
-		<-time.After(time.Millisecond)
 		done <- struct{}{}
 	}()
 
