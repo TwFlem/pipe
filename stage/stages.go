@@ -129,6 +129,38 @@ func Bridge[T any](done <-chan struct{}, in <-chan <-chan T) <-chan T {
 	return out
 }
 
+// Interleave
+// TODO: doc and test
+func Interleave[T any](done <-chan struct{}, ins ...<-chan T) <-chan T {
+	out := make(chan T)
+	go func() {
+		defer close(out)
+		closed := make([]bool, len(ins))
+		closedCount := 0
+		for {
+			for i, in := range ins {
+				select {
+				case <-done:
+					return
+				case v, ok := <-in:
+					if !ok {
+						if !closed[i] {
+							closed[i] = true
+							closedCount++
+						}
+						continue
+					}
+					out <- v
+				}
+			}
+			if closedCount >= len(ins) {
+				return
+			}
+		}
+	}()
+	return out
+}
+
 // Throttle only allow values in to values out once every tick of the delay duration
 func Throttle[T any](done <-chan struct{}, in <-chan T, delay time.Duration) <-chan T {
 	out := make(chan T)
