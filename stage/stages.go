@@ -138,11 +138,11 @@ func Interleave[T any](done <-chan struct{}, ins ...<-chan T) <-chan T {
 		closed := make([]bool, len(ins))
 		closedCount := 0
 		for {
-			for i, in := range ins {
+			for i := range ins {
 				select {
 				case <-done:
 					return
-				case v, ok := <-in:
+				case v, ok := <-ins[i]:
 					if !ok {
 						if !closed[i] {
 							closed[i] = true
