@@ -59,6 +59,9 @@ func countEvens(nums []int) int {
 }
 
 func intSliceEquals(t *testing.T, actual, expected []int) {
+	if len(actual) != len(expected) {
+		t.Fatalf("expected=%v but actual=%v", expected, actual)
+	}
 	for i := 0; i < len(expected); i++ {
 		if actual[i] != expected[i] {
 			t.Fatalf("expected=%v but actual=%v", expected, actual)

@@ -134,26 +134,29 @@ func Bridge[T any](done <-chan struct{}, in <-chan <-chan T) <-chan T {
 func Interleave[T any](done <-chan struct{}, ins ...<-chan T) <-chan T {
 	out := make(chan T)
 	go func() {
+		insCpy := make([]<-chan T, len(ins))
+		copy(insCpy, ins)
 		defer close(out)
-		closed := make([]bool, len(ins))
 		closedCount := 0
 		for {
-			for i := range ins {
+			for i := range insCpy {
+				if insCpy[i] == nil {
+					continue
+				}
+
 				select {
 				case <-done:
 					return
-				case v, ok := <-ins[i]:
+				case v, ok := <-insCpy[i]:
 					if !ok {
-						if !closed[i] {
-							closed[i] = true
-							closedCount++
-						}
+						closedCount++
+						insCpy[i] = nil
 						continue
 					}
 					out <- v
 				}
 			}
-			if closedCount >= len(ins) {
+			if closedCount >= len(insCpy) {
 				return
 			}
 		}
