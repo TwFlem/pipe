@@ -1,4 +1,4 @@
-package stage
+package pipe
 
 import (
 	"sync"
@@ -13,7 +13,7 @@ func TestBoundedBuf(t *testing.T) {
 	}
 
 	in := make(chan int)
-	boundedOut := BoundedBuf(done, in, 5, BoundedBufWithOnDrop(onDrop))
+	boundedOut := BufBounded(done, in, 5, boundedBufWithOnDrop(onDrop))
 
 	for i := 0; i < 3; i++ {
 		in <- i
@@ -73,7 +73,7 @@ func TestBoundedBuf_Cancelled(t *testing.T) {
 	}
 
 	boundedSize := 10
-	boundedBuf := BoundedBuf(done, in, boundedSize, BoundedBufWithOnDrop(onDrop))
+	boundedBuf := BufBounded(done, in, boundedSize, boundedBufWithOnDrop(onDrop))
 
 	go func() {
 		for i := 0; i < 20; i++ {

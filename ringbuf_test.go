@@ -1,4 +1,4 @@
-package stage
+package pipe
 
 import (
 	"sync"
@@ -13,7 +13,7 @@ func TestRingBuf(t *testing.T) {
 	}
 
 	in := make(chan int)
-	ringOut := RingBuf(done, in, 5, RingBufWithOnDrop(onDrop))
+	ringOut := BufRing(done, in, 5, ringBufWithOnDrop(onDrop))
 
 	for i := 0; i < 3; i++ {
 		in <- i
@@ -90,7 +90,7 @@ func TestRingBuf_Cancelled(t *testing.T) {
 	}
 
 	ringSize := 10
-	ringBuf := RingBuf(done, in, ringSize, RingBufWithOnDrop(onDrop))
+	ringBuf := BufRing(done, in, ringSize, ringBufWithOnDrop(onDrop))
 
 	go func() {
 		for i := 0; i < 20; i++ {

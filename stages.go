@@ -1,11 +1,11 @@
-package stage
+package pipe
 
 import (
 	"sync"
 	"time"
 )
 
-// OrDone syntatic sugar that allows the caller to either block on
+// OrDone syntactic sugar that allows the caller to either block on
 // reading in the next input from some specified channel or cancel
 // work when signaling done
 func OrDone[T any](done <-chan struct{}, in <-chan T) <-chan T {
@@ -37,7 +37,7 @@ func OrDone[T any](done <-chan struct{}, in <-chan T) <-chan T {
 // If Agg stops executing before the current chunk fills up the specified
 // size, the last chunk sent out will not be of size. Instead, it will be copied
 // to a smaller chunk.
-// NOTE: If Agg is cancelled mid way through a chunk, the results aggregated up until
+// NOTE: If Agg is canceled mid way through a chunk, the results aggregated up until
 // cancellation will just be thrown out.
 func Agg[T any](done <-chan struct{}, in <-chan T, size int) chan []T {
 	out := make(chan []T)
@@ -53,7 +53,7 @@ func Agg[T any](done <-chan struct{}, in <-chan T, size int) chan []T {
 				if !ok {
 					if i > 0 {
 						smallerChunk := make([]T, i)
-						for j := 0; j < len(smallerChunk); j++ {
+						for j := range smallerChunk {
 							smallerChunk[j] = chunk[j]
 						}
 						select {
@@ -129,8 +129,7 @@ func Bridge[T any](done <-chan struct{}, in <-chan <-chan T) <-chan T {
 	return out
 }
 
-// Interleave
-// TODO: doc and test
+// Interleave consume from each input channel in a round robin fashion
 func Interleave[T any](done <-chan struct{}, ins ...<-chan T) <-chan T {
 	out := make(chan T)
 	go func() {
@@ -191,7 +190,7 @@ func Take[T any](done <-chan struct{}, in <-chan T, n int) <-chan T {
 	out := make(chan T)
 	go func() {
 		defer close(out)
-		for i := 0; i < n; i++ {
+		for range n {
 			select {
 			case <-done:
 				return
@@ -212,7 +211,7 @@ func Take[T any](done <-chan struct{}, in <-chan T, n int) <-chan T {
 
 // Or pattern takes in multiple channels, waits for at least one of them
 // to receive a value before continuing execution.
-// This is useful if you need to wait for at least value for some unknown
+// This is useful if you need to wait for at least one value for some unknown
 // amount of channels.
 // The amount of goroutines creates is X/2 where X is the number of channels
 // passed in
@@ -277,7 +276,7 @@ func Tee[T any](done <-chan struct{}, in <-chan T) (<-chan T, <-chan T) {
 		for v := range OrDone(done, in) {
 			o1 := out1
 			o2 := out2
-			for i := 0; i < 2; i++ {
+			for range 2 {
 				select {
 				case <-done:
 					return
@@ -306,19 +305,19 @@ type bufConfig struct {
 
 type bufOpt func(*bufConfig)
 
-// BufWithOnBlockReport sets the callback that will get called when the fix sized buffer is unblocked after
+// bufWithOnBlockReport sets the callback that will get called when the fix sized buffer is unblocked after
 // being full for minimumBlockDurationForOnUnblock. It will report the duration the buffer was blocked. Useful
 // for instrumentation.
-func BufWithOnBlockReport(f func(time.Duration)) bufOpt {
+func bufWithOnBlockReport(f func(time.Duration)) bufOpt {
 	return func(bc *bufConfig) {
 		bc.onUnblocked = f
 	}
 }
 
-// BufWithMinimumBlockTimeToReport Defaults to 1 MS if the block report callback is
+// bufWithMinimumBlockTimeToReport Defaults to 1 MS if the block report callback is
 // configured. Represents the minimum duration required to report blocking time.
 // Can be set to 0.
-func BufWithMinimumBlockTimeToReport(dur time.Duration) bufOpt {
+func bufWithMinimumBlockTimeToReport(dur time.Duration) bufOpt {
 	return func(bc *bufConfig) {
 		bc.minimumBlockDurationForOnUnblock = dur
 	}
@@ -381,16 +380,16 @@ type ringBufConfig struct {
 
 type ringBufOpt func(*ringBufConfig)
 
-func RingBufWithOnDrop(f func()) ringBufOpt {
+func ringBufWithOnDrop(f func()) ringBufOpt {
 	return func(rbc *ringBufConfig) {
 		rbc.onDrop = f
 	}
 }
 
-// RingBuf Circular fix sized buffer. When the buffer is full and the receiver
+// BufRing Circular fix sized buffer. When the buffer is full and the receiver
 // is busy, the oldest value in the buffer will be evicted and the incoming
 // value will be queued.
-func RingBuf[T any](done <-chan struct{}, in <-chan T, size int, opts ...ringBufOpt) <-chan T {
+func BufRing[T any](done <-chan struct{}, in <-chan T, size int, opts ...ringBufOpt) <-chan T {
 	cfg := ringBufConfig{}
 
 	for _, f := range opts {
@@ -425,15 +424,15 @@ type boundedBufConfig struct {
 
 type boundedBufOpt func(*boundedBufConfig)
 
-func BoundedBufWithOnDrop(f func()) boundedBufOpt {
+func boundedBufWithOnDrop(f func()) boundedBufOpt {
 	return func(rbc *boundedBufConfig) {
 		rbc.onDrop = f
 	}
 }
 
-// BoundedBuf Fix sized buffer that drops incoming requests if full in favor
-// of allowing the requests that made it into the queue finish.
-func BoundedBuf[T any](done <-chan struct{}, in <-chan T, size int, opts ...boundedBufOpt) <-chan T {
+// BufBounded Fix sized buffer that drops incoming requests if full in favor
+// of allowing the requests that made it into the queue to finish.
+func BufBounded[T any](done <-chan struct{}, in <-chan T, size int, opts ...boundedBufOpt) <-chan T {
 	cfg := boundedBufConfig{}
 
 	for _, f := range opts {

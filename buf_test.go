@@ -1,4 +1,4 @@
-package stage
+package pipe
 
 import (
 	"testing"
@@ -20,7 +20,7 @@ func TestBuf(t *testing.T) {
 		blocked <- struct{}{}
 	}
 
-	bufOut := Buf(done, in, maxOutputBufferSize, BufWithMinimumBlockTimeToReport(0), BufWithOnBlockReport(onBlockReport), bufWithOnBlock(onBlock))
+	bufOut := Buf(done, in, maxOutputBufferSize, bufWithMinimumBlockTimeToReport(0), bufWithOnBlockReport(onBlockReport), bufWithOnBlock(onBlock))
 
 	for i := 0; i < 3; i++ {
 		in <- i
@@ -84,7 +84,7 @@ func TestBuf_Cancelled(t *testing.T) {
 	}
 
 	maxSize := 2
-	bufOut := Buf(done, in, maxSize, BufWithMinimumBlockTimeToReport(0), BufWithOnBlockReport(onBlockReport), bufWithOnBlock(onBlock))
+	bufOut := Buf(done, in, maxSize, bufWithMinimumBlockTimeToReport(0), bufWithOnBlockReport(onBlockReport), bufWithOnBlock(onBlock))
 
 	go func() {
 		for i := 0; i < 7; i++ {
